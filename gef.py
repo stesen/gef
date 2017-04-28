@@ -6188,23 +6188,27 @@ class DereferenceCommand(GenericCommand):
         string_color = __config__.get("theme.dereference_string")[0]
 
         prev_addr_value = None
-        max_recursion = max(int(__config__["dereference.max_recursion"][0]), 1)
+        recursion = max(int(__config__["dereference.max_recursion"][0]), 1)
         value = align_address(long(addr))
         addr = lookup_address(value)
         msg = [format_address(addr.value),]
         seen_addrs = set()
 
-        while addr.section and max_recursion:
+        while addr.section and recursion:
             if addr.value in seen_addrs:
                 msg.append("[loop detected]")
                 break
             seen_addrs.add(addr.value)
 
-            max_recursion -= 1
+            recursion -= 1
 
             # Is this value a pointer or a value?
             # -- If it's a pointer, dereference
-            deref = addr.dereference()
+            try:
+                deref = addr.dereference()
+            except gdb.MemoryError:
+                return []
+
             new_addr = lookup_address(deref)
             if new_addr.valid:
                 addr = new_addr
