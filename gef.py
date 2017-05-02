@@ -551,10 +551,17 @@ class Instruction:
         return
 
     def __str__(self):
-        return "{:#x}  {}  {} {}".format(self.address,
+        return "{:#10x} {:16} {:6} {}".format(self.address,
                                          self.location,
                                          self.mnemo,
                                          ", ".join(self.operands))
+
+    def __format__(self, fs):
+        address = "{:#10x} ".format(self.address) if "a" in fs else ""
+        return "{}{:16} {:6} {}".format(address,
+                                        self.location if "l" in fs else "",
+                                        self.mnemo if "m" in fs else "",
+                                        ", ".join(self.operands) if "o" in fs else "").strip()
 
     def is_valid(self):
         return "(bad)" not in self.mnemo
@@ -2453,8 +2460,8 @@ def cached_lookup_type(_type):
 
 
 def get_memory_alignment(in_bits=False):
-    """Return sizeof(register). If `in_bits` is set to True, the result is returned in bits,
-    otherwise in bytes."""
+    """Return sizeof(size_t). If `in_bits` is set to True, the result is
+    returned in bits, otherwise in bytes."""
     res = cached_lookup_type('size_t')
     if res is not None:
         return res.sizeof if not in_bits else res.sizeof * 8
@@ -2486,9 +2493,9 @@ def format_address(addr):
 
 
 def align_address(address):
-    """Align the address correctly."""
+    """Align the provided address to the process's native length."""
     if get_memory_alignment(in_bits=True) == 32:
-        ret = address & 0x00000000FFFFFFFF
+        ret = address & 0xFFFFFFFF
     else:
         ret = address & 0xFFFFFFFFFFFFFFFF
     return ret
@@ -2921,7 +2928,7 @@ def register_priority_command(cls):
 
 
 class GenericCommand(gdb.Command):
-    """This is a meta-class for invoking commands, should not be invoked"""
+    """This is an abstract class for invoking commands, should not be invoked"""
     __metaclass__ = abc.ABCMeta
 
     def __init__(self, *args, **kwargs):
@@ -2953,17 +2960,16 @@ class GenericCommand(gdb.Command):
     def do_invoke(self, argv): pass
 
     def pre_load(self): pass
+
     def post_load(self): pass
 
     @property
-    def settings(self): pass
-
-    @settings.getter
     def settings(self):
         return { x.split(".", 1)[1]: __config__[x] for x in __config__
                  if x.startswith("{:s}.".format(self._cmdline_)) }
 
     def get_setting(self, name): return self.settings[name][1](self.settings[name][0])
+
     def has_setting(self, name): return name in self.settings
 
     def add_setting(self, name, value, description=""):
@@ -2979,16 +2985,17 @@ class GenericCommand(gdb.Command):
 
 # Copy/paste this template for new command
 # class TemplateCommand(GenericCommand):
-# """TemplateCommand: description here will be seen in the help menu for the command."""
+#     """TemplateCommand: description here will be seen in the help menu for the command."""
+#
+#     _cmdline_ = "template-fake"
+#     _syntax_  = "{:s}".format(_cmdline_)
+#     _aliases_ = ["tpl-fk",]
+#     def __init__(self):
+#         super(TemplateCommand, self).__init__(complete=gdb.COMPLETE_FILENAME)
+#         return
+#     def do_invoke(self, argv):
+#         return
 
-    # _cmdline_ = "template-fake"
-    # _syntax_  = "{:s}".format(_cmdline_)
-    # _aliases_ = ["tpl-fk",]
-    # def __init__(self):
-    #     super(TemplateCommand, self).__init__(complete=gdb.COMPLETE_FILENAME)
-    #     return
-    # def do_invoke(self, argv):
-    #     return
 
 @register_command
 class CanaryCommand(GenericCommand):
@@ -6149,9 +6156,9 @@ class DereferenceCommand(GenericCommand):
         addrs = DereferenceCommand.dereference_from(current_address)
         l  = ""
         addr_l = format_address(long(addrs[0], 16))
-        l += "{:s}{:s}+{:#04x}: {:s}".format(Color.colorify(addr_l, attrs=base_address_color),
+        l += "{:s}{:s}+{:#04x}: {:{ma}s}".format(Color.colorify(addr_l, attrs=base_address_color),
                                              vertical_line, offset,
-                                             sep.join(addrs[1:]))
+                                             sep.join(addrs[1:]), ma=(memalign*2 + 2))
 
         values = []
         for regname, regvalue in regs:
@@ -6219,7 +6226,7 @@ class DereferenceCommand(GenericCommand):
             if addr.section:
                 if addr.section.is_executable() and addr.is_in_text_segment():
                     insn = gef_current_instruction(addr.value)
-                    msg.append(Color.colorify(str(insn), attrs=code_color))
+                    msg.append(Color.colorify("{:lmo}".format(insn), attrs=code_color))
                     break
 
                 elif addr.section.permission.value & Permission.READ:
@@ -6236,19 +6243,8 @@ class DereferenceCommand(GenericCommand):
                         break
 
             # if not able to parse cleanly, simply display and break
-            val = "{:x}".format(long(deref) & 0xffffffffffffffff)
-            if len(val)%2 != 0:  # pad the hexa representation to a multiple of 2
-                val = "0"+val
-
-            # if the value is only made of printable characters, display its value
-            val_str = binascii.unhexlify(val)
-            if PYTHON_MAJOR==3:
-                is_string = all(map(lambda x: chr(x) in string.printable, val_str))
-            else:
-                is_string = all(map(lambda x: x in string.printable, val_str))
-            if is_string:
-                val+= ' ("{}"?)'.format(Color.colorify(gef_pystring(val_str), attrs=string_color))
-            msg.append("0x"+val)
+            val = "{:#0{ma}x}".format(long(deref & 0xFFFFFFFFFFFFFFFF), ma=(get_memory_alignment() * 2 + 2))
+            msg.append(val)
             break
 
         return msg
