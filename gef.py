@@ -7575,8 +7575,26 @@ class GefRestoreCommand(gdb.Command):
 
 ############ add by stesen start ##########
 @register_command
+class Offset(gdb.Command):
+    """get offset from struct or class"""
+    _cmdline_ = "offset"
+    _syntax_  = "{:s} typename member".format(_cmdline_)
+
+    def __init__(self, *args, **kwargs):
+        super (Offset, self).__init__ (Offset._cmdline_, gdb.COMMAND_SUPPORT, gdb.COMPLETE_SYMBOL)
+        return
+
+    def invoke(self, args, from_tty):
+        argv = args.split(" ")
+        if (len(argv) != 2):
+            print("invalid args")
+            return
+        gdb.execute("p &(({:s} *)0)->{:s}".format(argv[0], argv[1]));
+        return
+
+@register_command
 class View(gdb.Command):
-    """deal with android bionic heap"""
+    """view memory"""
     _cmdline_ = "v"
     _syntax_  = "{:s} addr [len]".format(_cmdline_)
 
@@ -7617,7 +7635,7 @@ class ShowBionicHeap(gdb.Command):
     _syntax_  = "{:s} [dump|show]".format(_cmdline_)
 
     def __init__(self, *args, **kwargs):
-        super (ShowBionicHeap, self).__init__ (ShowBionicHeap._cmdline_, gdb.COMMAND_SUPPORT)
+        super (ShowBionicHeap, self).__init__ (ShowBionicHeap._cmdline_, gdb.COMMAND_SUPPORT, gdb.COMPLETE_FILENAME)
         return
 
     def invoke(self, args, from_tty):
@@ -7651,7 +7669,7 @@ class ShowBionicHeap(gdb.Command):
             print("invalid args");
             return
         vmmap = get_process_maps()
-        bionic_heap_name = ["[anon:libc_malloc]"]
+        bionic_heap_name = ["[anon:libc_malloc]", "[heap]"]
         if not vmmap:
             err("No address mapping information found")
             return
@@ -7946,6 +7964,10 @@ if __name__  == "__main__":
         # saving GDB indexes in GEF tempdir
         gef_makedirs(GEF_TEMP_DIR)
         gdb.execute("save gdb-index {}".format(GEF_TEMP_DIR))
+
+############ add by stesen start ##########
+        gdb.execute("set print object on")
+############ add by stesen end ##########
 
         # load GEF
         __gef__ = GefCommand()
