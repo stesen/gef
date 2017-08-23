@@ -7628,22 +7628,34 @@ class View(gdb.Command):
         gdb.execute("x/{:d}xb 0x{:x}".format(dumplen, dumpstart));
         return
 
+def BHPShowEntry(entry):
+    l = []
+    l.append(format_address(entry.page_start))
+    l.append(format_address(entry.page_end))
+    l.append(format_address(entry.offset))
+    l.append(str(entry.permission))
+    l.append(entry.path)
+    print(" ".join(l))
+
 @register_command
 class ShowBionicHeap(gdb.Command):
     """deal with android bionic heap"""
     _cmdline_ = "bhp"
-    _syntax_  = "{:s} [dump|show]".format(_cmdline_)
+    _syntax_  = "{:s} [dump|show|find|where]".format(_cmdline_)
 
     def __init__(self, *args, **kwargs):
         super (ShowBionicHeap, self).__init__ (ShowBionicHeap._cmdline_, gdb.COMMAND_SUPPORT, gdb.COMPLETE_FILENAME)
         return
+
 
     def invoke(self, args, from_tty):
         global __maps_file__
         show = False
         dump = False
         find = False
+        where = False
         find_patt = ""
+        where_addr = 0
         if (args and args.startswith("maps ")):
             argv = args.split(" ");
             if (len(argv) == 2 and os.access(argv[1], os.R_OK)):
@@ -7665,6 +7677,16 @@ class ShowBionicHeap(gdb.Command):
                 print("invalid parttern");
                 return
             find = True;
+        elif (args and args.startswith("where ")):
+            _, where_patt = args.split(" ", 2)
+            if (len(where_patt) == 0):
+                print("invalid parttern");
+                return
+            if (where_patt.startswith("0x")):
+                where_addr = int(where_patt, 16)
+            else:
+                where_addr = int(where_patt)
+            where = True;
         else:
             print("invalid args");
             return
@@ -7688,15 +7710,7 @@ class ShowBionicHeap(gdb.Command):
             page_start_str = format_address(entry.page_start)
             page_end_str = format_address(entry.page_end)
             if (show):
-                l = []
-                l.append(page_start_str)
-                l.append(page_end_str)
-                l.append(format_address(entry.offset))
-
-                l.append(str(entry.permission))
-
-                l.append(entry.path)
-                print(" ".join(l))
+                BHPShowEntry(entry)
 
             if (dump):
                 dumpname = "{:s}_{:s}-{:s}.bin".format(__maps_file__, page_start_str, page_end_str)
@@ -7705,7 +7719,12 @@ class ShowBionicHeap(gdb.Command):
             if (find):
                 print("finding \"{:s}\" in {:s}-{:s}:".format(find_patt, page_start_str, page_end_str))
                 gdb.execute("find {:s}, {:s}, {:s}".format(page_start_str, page_end_str, find_patt))
+            if (where):
+                if (int(entry.page_start) <= int(where_addr) and int(entry.page_end) > int(where_addr)):
+                    BHPShowEntry(entry)
         return
+
+
 ############ add by stesen end ##########
 
 class GefMissingCommand(gdb.Command):
