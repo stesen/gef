@@ -7670,7 +7670,6 @@ class ShowBionicHeap(gdb.Command):
             print("use \"bhp maps\" first");
             return
         elif (args and args == "show"):
-            print("set maps path to " + args)
             show = True;
         elif (args and args == "dump"):
             dump = True;
