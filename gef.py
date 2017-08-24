@@ -7707,7 +7707,7 @@ class ShowBionicHeap(gdb.Command):
                 print("{:<23s} {:<23s} {:<23s} {:<4s} {:s}".format(*headers))
 
         for entry in vmmap:
-            if entry.path not in bionic_heap_name:
+            if (show or dump or find ) and entry.path not in bionic_heap_name:
                 continue
             page_start_str = format_address(entry.page_start)
             page_end_str = format_address(entry.page_end)
