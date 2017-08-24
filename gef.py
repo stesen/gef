@@ -7579,6 +7579,7 @@ class Offset(gdb.Command):
     """get offset from struct or class"""
     _cmdline_ = "offset"
     _syntax_  = "{:s} typename member".format(_cmdline_)
+    _aliases_ = ["o", ]
 
     def __init__(self, *args, **kwargs):
         super (Offset, self).__init__ (Offset._cmdline_, gdb.COMMAND_SUPPORT, gdb.COMPLETE_SYMBOL)
@@ -7595,8 +7596,9 @@ class Offset(gdb.Command):
 @register_command
 class View(gdb.Command):
     """view memory"""
-    _cmdline_ = "v"
+    _cmdline_ = "view"
     _syntax_  = "{:s} addr [len]".format(_cmdline_)
+    _aliases_ = ["v", ]
 
     def __init__(self, *args, **kwargs):
         super (View, self).__init__ (View._cmdline_, gdb.COMMAND_SUPPORT)
@@ -7640,8 +7642,9 @@ def BHPShowEntry(entry):
 @register_command
 class ShowBionicHeap(gdb.Command):
     """deal with android bionic heap"""
-    _cmdline_ = "bhp"
+    _cmdline_ = "bionic-heap"
     _syntax_  = "{:s} [dump|show|find|where]".format(_cmdline_)
+    _aliases_ = ["bhp", ]
 
     def __init__(self, *args, **kwargs):
         super (ShowBionicHeap, self).__init__ (ShowBionicHeap._cmdline_, gdb.COMMAND_SUPPORT, gdb.COMPLETE_FILENAME)
@@ -7723,6 +7726,62 @@ class ShowBionicHeap(gdb.Command):
                 if (int(entry.page_start) <= int(where_addr) and int(entry.page_end) > int(where_addr)):
                     BHPShowEntry(entry)
         return
+
+@register_command
+class ViewStructLayout (gdb.Command):
+    """Show the structure.
+This command takes a single argument, a type name."""
+
+    _cmdline_ = "view-struct-layout"
+    _syntax_  = "{:s} struct_name".format(_cmdline_)
+    _aliases_ = ["vsl", ]
+
+    def __init__ (self):
+        super (ViewStructLayout, self).__init__ (ViewStructLayout._cmdline_, gdb.COMMAND_DATA,
+                                       gdb.COMPLETE_SYMBOL)
+
+    def vsl(self, atype, level, name):
+        if name is None:
+            name = ''
+        tag = atype.tag
+        if tag is None:
+            tag = ''
+        print ('/* %12s 0x%016x %d */ %sstruct %s {' % ("total_size:", atype.strip_typedefs().sizeof, atype.strip_typedefs().sizeof, ' ' * (2 * level), tag))
+        endpos = 0
+        for field in atype.fields():
+            # Skip static fields
+            if not hasattr (field, ('bitpos')):
+                continue
+            # find the type
+            ftype = field.type.strip_typedefs()
+
+            # Are we a bitfield?
+            if field.bitsize > 0:
+                fieldsize = field.bitsize
+            else:
+                if ftype.code == gdb.TYPE_CODE_STRUCT and len(ftype.fields()) == 0:
+                    fieldsize = 0 # empty struct
+                else:
+                    fieldsize = 8 * ftype.sizeof # will get packing wrong for structs
+
+            print ('/* 0x%016x 0x%016x  */' % (field.bitpos // 8, fieldsize // 8), end="")
+            endpos = field.bitpos + fieldsize
+
+            print (' ' * (4 + 2 * level), end="")
+            print ('%s %s' % (str (ftype), field.name))
+
+        print (' ' * (14 + 2 * level), end="")
+        print ('} %s' % name)
+
+    def invoke (self, arg, from_tty):
+        argv = gdb.string_to_argv(arg)
+        if len(argv) > 2:
+            raise gdb.GdbError('vsl takes 1 arguments.')
+        stype = gdb.lookup_type (argv[0])
+        ptype = stype.strip_typedefs()
+        if ptype.code != gdb.TYPE_CODE_STRUCT:
+            raise '%s is not a struct type' % arg
+        self.vsl(ptype, 0, '')
 
 
 ############ add by stesen end ##########
