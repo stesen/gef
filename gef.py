@@ -121,16 +121,29 @@ elif PYTHON_MAJOR == 3:
     long = int
     unicode = str
 
-    left_arrow = " \u2190 "
-    right_arrow = " \u2192 "
-    down_arrow = "\u21b3"
-    horizontal_line = "\u2500"
-    vertical_line = "\u2502"
-    cross = "\u2718 "
-    tick = "\u2713 "
-    gef_prompt = "gef-stesen\u27a4  "
-    gef_prompt_on = "\001\033[1;32m\002{0:s}\001\033[0m\002".format(gef_prompt)
-    gef_prompt_off = "\001\033[1;31m\002{0:s}\001\033[0m\002".format(gef_prompt)
+    oss = os.environ.get('ANDROID_ROOT')
+    if (oss and oss == "/system"):
+        left_arrow = "<-"
+        right_arrow = "->"
+        down_arrow = "\\->"
+        horizontal_line = "-"
+        vertical_line = "|"
+        cross = "x"
+        tick = "v"
+        gef_prompt = "gef-stesen@android> "
+        gef_prompt_on = "\001\033[1;32m\002{0:s}\001\033[0m\002".format(gef_prompt)
+        gef_prompt_off = "\001\033[1;31m\002{0:s}\001\033[0m\002".format(gef_prompt)
+    else:
+        left_arrow = " \u2190 "
+        right_arrow = " \u2192 "
+        down_arrow = "\u21b3"
+        horizontal_line = "\u2500"
+        vertical_line = "\u2502"
+        cross = "\u2718 "
+        tick = "\u2713 "
+        gef_prompt = "gef-stesen\u27a4  "
+        gef_prompt_on = "\001\033[1;32m\002{0:s}\001\033[0m\002".format(gef_prompt)
+        gef_prompt_off = "\001\033[1;31m\002{0:s}\001\033[0m\002".format(gef_prompt)
 
 else:
     raise Exception("WTF is this Python version??")
