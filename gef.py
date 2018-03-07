@@ -6632,6 +6632,52 @@ class VMMapCommand(GenericCommand):
             print(" ".join(l))
         return
 
+@register_command
+class VMfind(GenericCommand):
+    """find virtual memory mapping"""
+
+    _cmdline_ = "vmfind"
+    _syntax_  = "{:s}".format(_cmdline_)
+
+    @only_if_gdb_running
+    def do_invoke(self, argv):
+        vmmap = get_process_maps()
+        if not vmmap:
+            err("No address mapping information found")
+            return
+        if not argv:
+            err("need arg in hex")
+            return
+        hexaddr = int(argv[0], 16)
+
+        color = get_gef_setting("theme.xinfo_title_message")
+        headers = [Color.colorify(x, attrs=color) for x in ["Start", "End", "Offset", "Perm", "Path"]]
+        if is_elf64():
+            print("{:<31s} {:<31s} {:<31s} {:<4s} {:s}".format(*headers))
+        else:
+            print("{:<23s} {:<23s} {:<23s} {:<4s} {:s}".format(*headers))
+
+        for entry in vmmap:
+            if hexaddr < entry.page_start or hexaddr >= entry.page_end:
+                continue
+
+            l = []
+            l.append(format_address(entry.page_start))
+            l.append(format_address(entry.page_end))
+            l.append(format_address(entry.offset))
+
+            if entry.permission.value == (Permission.READ|Permission.WRITE|Permission.EXECUTE) :
+                l.append(Color.colorify(str(entry.permission), attrs="blink bold red"))
+            else:
+                l.append(str(entry.permission))
+
+            l.append(entry.path)
+
+            print(" ".join(l))
+            l = []
+            print(" |-- 0x{:x} offset from start 0x{:x}".format(hexaddr, hexaddr - entry.page_start))
+            print(" |-- 0x{:x} offset  to end    0x{:x}".format(hexaddr, entry.page_end - hexaddr))
+        return
 
 @register_command
 class XFilesCommand(GenericCommand):
