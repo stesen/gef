@@ -2021,7 +2021,7 @@ def get_filepath():
         else:
             return filename
     else:
-        return filename
+        return filename.replace("target:", "")
 
 
 @lru_cache()
@@ -6632,6 +6632,36 @@ class VMMapCommand(GenericCommand):
             print(" ".join(l))
         return
 
+
+@register_command
+class Bso(GenericCommand):
+    """find virtual memory mapping"""
+
+    _cmdline_ = "bso"
+    _syntax_  = "{:s}".format(_cmdline_)
+
+    @only_if_gdb_running
+    def do_invoke(self, argv):
+        vmmap = get_process_maps()
+        if not vmmap:
+            err("No address mapping information found")
+            return
+        if not argv:
+            err("need arg: soname hex")
+            return
+        soname = argv[0]
+        hexaddr = int(argv[1], 16)
+
+        for entry in vmmap:
+            if soname not in entry.path:
+                continue
+            if not (entry.permission.value & Permission.EXECUTE):
+                continue
+            break_point = hexaddr + entry.page_start
+            print("Start of {:s} is 0x{:x}, put a breakpoint @ 0x{:x}".format(entry.path, entry.page_start, break_point))
+            gdb.execute("b *(0x{:x})".format(break_point))
+            return
+
 @register_command
 class VMfind(GenericCommand):
     """find virtual memory mapping"""
@@ -7718,11 +7748,15 @@ class ShowBionicHeap(gdb.Command):
         where = False
         find_patt = ""
         where_addr = 0
-        if (args and args.startswith("maps ")):
+        dump_addr = 0
+        if (args and args.startswith("maps")):
             argv = args.split(" ");
-            if (len(argv) == 2 and os.access(argv[1], os.R_OK)):
+            if len(argv) == 1:
+                __maps_file__ = "/proc/{:d}/maps".format(get_pid())
+                print("set maps path to " + __maps_file__)
+            elif (len(argv) == 2 and os.access(argv[1], os.R_OK)):
                 __maps_file__ = argv[1]
-                print("set maps path to " + argv[1])
+                print("set maps path to " + __maps_file__)
             else:
                 print("invalid args or path")
         elif (__maps_file__ == "NONE"):
@@ -7730,7 +7764,17 @@ class ShowBionicHeap(gdb.Command):
             return
         elif (args and args == "show"):
             show = True;
-        elif (args and args == "dump"):
+        elif (args and args.startswith("dump")):
+            argv = args.split(" ");
+            if (len(argv) == 2):
+                dump_patt = argv[1]
+                if (len(dump_patt) == 0):
+                    print("invalid parttern");
+                    return
+                if (dump_patt.startswith("0x")):
+                    dump_addr = int(dump_patt, 16)
+                else:
+                    dump_addr = int(dump_patt)
             dump = True;
         elif (args and args.startswith("find ")):
             _, find_patt = args.split(" ", 2)
@@ -7766,21 +7810,29 @@ class ShowBionicHeap(gdb.Command):
                 print("{:<23s} {:<23s} {:<23s} {:<4s} {:s}".format(*headers))
 
         for entry in vmmap:
-            if (show or dump or find ) and entry.path not in bionic_heap_name:
+            if ( not show ) and ( not dump) and (not find ) and (entry.path not in bionic_heap_name):
                 continue
             page_start_str = format_address(entry.page_start)
             page_end_str = format_address(entry.page_end)
             if (show):
                 BHPShowEntry(entry)
-
-            if (dump):
-                dumpname = "{:s}_{:s}-{:s}.bin".format(__maps_file__, page_start_str, page_end_str)
-                print("start dumping to ..." + dumpname)
-                gdb.execute("dump binary memory {:s} {:s} {:s}".format(dumpname, page_start_str, page_end_str))
-            if (find):
+            elif (dump):
+                if (int(entry.page_start) <= dump_addr and int(entry.page_end) > dump_addr):
+                    dumpprefix = ""
+                    if __maps_file__.startswith("/proc"):
+                        tmp = __maps_file__.split("/")
+                        dumpprefix = "/data/bhp_dump_{:s}".format(tmp[2])
+                    else:
+                        dumpprefix = __maps_file__
+                    dumpname = "{:s}_{:s}-{:s}.bin".format(dumpprefix, page_start_str, page_end_str)
+                    if (os.path.exists(dumpname)):
+                        dumpname = "{:s}_{:s}-{:s}.{:d}.bin".format(dumpprefix, page_start_str, page_end_str, int(round(time.time() * 1000)))
+                    print("start dumping to ..." + dumpname)
+                    gdb.execute("dump binary memory {:s} {:s} {:s}".format(dumpname, page_start_str, page_end_str))
+            elif (find):
                 print("finding \"{:s}\" in {:s}-{:s}:".format(find_patt, page_start_str, page_end_str))
                 gdb.execute("find {:s}, {:s}, {:s}".format(page_start_str, page_end_str, find_patt))
-            if (where):
+            elif (where):
                 if (int(entry.page_start) <= int(where_addr) and int(entry.page_end) > int(where_addr)):
                     BHPShowEntry(entry)
         return
